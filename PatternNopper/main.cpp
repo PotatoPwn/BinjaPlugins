@@ -143,8 +143,8 @@ void FindSig(BinaryView* View)
 				size_t Size = ViewRef->GetInstructionLength(Archtype, Result[i]);
 				if (Size == HexArray.size())
 				{
-					//ViewRef->ConvertToNop(Archtype, Result[i]);
-					Log(InfoLog, "Nopped 0x%llx", Result[i]);
+					ViewRef->ConvertToNop(Archtype, Result[i]);
+					//Log(InfoLog, "Nopped 0x%llx", Result[i]);
 				}
 			}
 		}
@@ -159,7 +159,6 @@ void ExecutionList(BinaryView* View)
 	{
 		FindSig(View);
 	};
-	//bruh();
 	WorkerEnqueue(HuntWrap, "Bruh");
 
 	Log(InfoLog, "Hunt has Started!");
@@ -171,7 +170,7 @@ BN_DECLARE_CORE_ABI_VERSION
 
 BINARYNINJAPLUGIN bool CorePluginInit()
 {
-	PluginCommand::Register("Search for Sig", "Input SigHere...",
+	PluginCommand::Register("Hunt Junk", "Hunt & NOPS Patterns in the Pattern Header",
 		[](BinaryView* View) { ExecutionList(View); });
 
 	LogInfo("Setup for Test Sig Scanner has been Created");
