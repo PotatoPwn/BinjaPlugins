@@ -1,0 +1,4 @@
+[submodule "Extern/binaryninja-api"]
+	path = Extern/binaryninja-api
+	url = https://github.com/Vector35/binaryninja-api.git
+	branch = master
