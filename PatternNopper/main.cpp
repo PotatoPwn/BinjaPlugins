@@ -19,22 +19,25 @@ std::vector<int> ConvertToByte(std::string& Input)
 	for (unsigned int i = 0; i < Input.size(); i += 2)
 	{
 		std::string ByteString = Input.substr(i, 2);
-		if (ByteString.find('?') != std::string::npos)
+		if (ByteString.find("??") != std::string::npos)
 		{
-			// Convert ? strings to the hex value of F
-			std::replace(ByteString.begin(), ByteString.end(), '?', 'F');
+			// Convert ?? strings to the hex value of FF
+			// Not Converting Correctly :/ // Too Big?
+			//std::replace(ByteString.begin(), ByteString.end(), '?', 'F');
+			Output.push_back(-1);
+			continue;
 		}
 
 		int Value;
 		try
 		{
 			// Convert to Hex
-			Value = std::stoi(ByteString, nullptr, 16);
+			Value = std::stoi(ByteString, 0, 16);
 		}
 		catch (...)
 		{
-			Log(ErrorLog, "Error Occured Converting to Hex");
-			Value = 0xF;
+			Log(ErrorLog, "Error Occured Converting to Hex > %s", ByteString.c_str());
+			Value = -1;
 		}
 
 		Output.push_back(Value);
@@ -46,15 +49,15 @@ std::vector<int> ConvertToByte(std::string& Input)
 void FindSig(BinaryView* View)
 {
 	// Essential for Threading (Thanks for Emesare & GalenBwill on Binja slack for this)
+#ifdef _DEBUG
+	BinaryView* ViewRef = View;
+#else
 	Ref<BinaryView> ViewRef = View;
+#endif
 
 	for (unsigned int i = 0; i < DeadCode.size(); i++)
 	{
 		std::string InputData = DeadCode[i];
-
-
-		// Testing Area
-
 
 		if (InputData.empty())
 		{
@@ -69,6 +72,7 @@ void FindSig(BinaryView* View)
 			return;
 		}
 
+
 		uint64_t BinStart = ViewRef->GetStart();
 		uint64_t BinEnd = ViewRef->GetEnd();
 		uint64_t BinSize = BinEnd - BinStart;
@@ -76,7 +80,7 @@ void FindSig(BinaryView* View)
 		//Log(InfoLog, "bin_start = 0x%llx", BinStart);
 		//Log(InfoLog, "bin_end = 0x%llx", BinEnd);
 		//Log(InfoLog, "bin_size = 0x%llx", BinSize);
-
+		//Log(InfoLog, "%llu", HexArray.size());
 		// Begin Searching Process
 		// https://github.com/rikodot/binja_native_sigscan/blob/main/sigscan.cpp#L375
 
@@ -87,15 +91,17 @@ void FindSig(BinaryView* View)
 			uint64_t Index = 0;
 			unsigned char ReadBytes = 0;
 
-			std::vector<uint64_t> ResultA = { 0 };
+			// Neat little thing, dont preset up an { 0 } as the first result will be a 0, neat...
+			std::vector<uint64_t> ResultA;
 
 			for (uint64_t i = StartAddress; i < BinEnd && Index < HexArray.size(); i++)
 			{
 				// Read Value
-				ViewRef->Read(&ReadBytes, i, HexArray.size());
+				ViewRef->Read(&ReadBytes, i, 2);
+				//Log(InfoLog, "%d", HexArray[Index]);
 
 				// if Match
-				if (HexArray[Index] == ReadBytes || HexArray[Index] == 0xFF)
+				if (HexArray[Index] == ReadBytes || HexArray[Index] == -1)
 				{
 					// Found First Byte to Match
 					if (!FoundFirstMatch)
@@ -141,15 +147,23 @@ void FindSig(BinaryView* View)
 			for (unsigned int i = 0; i < Result.size(); i++)
 			{
 				size_t Size = ViewRef->GetInstructionLength(Archtype, Result[i]);
-				if (Size == HexArray.size())
+				if (Size <= HexArray.size())
 				{
-					ViewRef->ConvertToNop(Archtype, Result[i]);
+					// Will need a size check as will break functions by nopping functions which arent the intended ones :/
+					// Get Base Address increment, increment by 1 based on size of hexarray & nop
+					// ie base address = 512221 size equals 5, 512221 += 1 -> nop etc etc 512222 += 1 -> nop
+					uint64_t j = Result[i];
+					for (j; j < Result[i] + HexArray.size(); j++)
+					{
+						ViewRef->ConvertToNop(Archtype, j);
+					}
 					//Log(InfoLog, "Nopped 0x%llx", Result[i]);
 				}
 			}
+			Log(InfoLog, "Finished Clearing %s", InputData.c_str());
 		}
-		Log(InfoLog, "Finished Clearing %s", InputData.c_str());
 	}
+	Log(InfoLog, "Finished Hunting!");
 }
 
 
@@ -159,7 +173,12 @@ void ExecutionList(BinaryView* View)
 	{
 		FindSig(View);
 	};
+
+#ifdef _DEBUG
+	HuntWrap();
+#else
 	WorkerEnqueue(HuntWrap, "Bruh");
+#endif
 
 	Log(InfoLog, "Hunt has Started!");
 }
