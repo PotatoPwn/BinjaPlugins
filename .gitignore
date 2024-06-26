@@ -1,4 +1,6 @@
-/PatternNopper/cmake-build-debug/
-/PatternNopper/cmake-build-release/
+/PatternPatcher/cmake-build-debug/
+/PatternPatcher/cmake-build-release/
 /.idea
 /Extern/binaryninja-api/
+/PatchReader/cmake-build-debug/
+/PatchReader/cmake-build-release/
