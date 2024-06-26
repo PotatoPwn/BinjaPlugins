@@ -134,7 +134,9 @@ void FindSig(BinaryView* View)
 		};
 
 		// Configure Archtecture for NOP Function
+
 		Ref<Architecture> Archtype = Architecture::GetByName("x86_64");
+
 
 		std::vector<uint64_t> Result = HuntSig(BinStart);
 
@@ -155,7 +157,21 @@ void FindSig(BinaryView* View)
 					uint64_t j = Result[i];
 					for (j; j < Result[i] + HexArray.size(); j++)
 					{
-						ViewRef->ConvertToNop(Archtype, j);
+						//ViewRef->ConvertToNop(Archtype, j);
+						Ref<Architecture> Archtype = Architecture::GetByName("x86_64");
+						std::vector<Ref<Function>> function = ViewRef->GetAnalysisFunctionsContainingAddress(j);
+
+						if (function.size() != 0)
+						{
+							for (unsigned int g = 0; g < function.size(); g++)
+							{
+								function[g]->SetUserInstructionHighlight(Archtype, j, RedHighlightColor);
+								Log(InfoLog, "Function at 0x%llx has been highlighted", j);
+							}
+						}
+						else
+							Log(WarningLog, "Function at 0x%llx doesnt have a function, unable to highlight", j);
+
 					}
 					//Log(InfoLog, "Nopped 0x%llx", Result[i]);
 				}
@@ -177,7 +193,7 @@ void ExecutionList(BinaryView* View)
 #ifdef _DEBUG
 	HuntWrap();
 #else
-	WorkerEnqueue(HuntWrap, "Bruh");
+	// WorkerEnqueue(HuntWrap, "Bruh");
 #endif
 
 	Log(InfoLog, "Hunt has Started!");
@@ -191,6 +207,7 @@ BINARYNINJAPLUGIN bool CorePluginInit()
 {
 	PluginCommand::Register("Hunt Junk", "Hunt & NOPS Patterns in the Pattern Header",
 		[](BinaryView* View) { ExecutionList(View); });
+
 
 	LogInfo("Setup for Test Sig Scanner has been Created");
 	return true;
