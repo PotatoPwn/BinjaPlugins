@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.9 FATAL_ERROR)
 
-project(HuntSig CXX C)
+project(PatternPatcher CXX C)
 
 add_library(${PROJECT_NAME} SHARED
         main.cpp)
@@ -34,5 +34,4 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     VISIBILITY_INLINES_HIDDEN ON
     POSITION_INDEPENDENT_CODE ON
     RUNTIME_OUTPUT_DIRECTORY "../../Bin"
-    #RUNTIME_OUTPUT_DIRECTORY "C:/Users/<USERNAME>/AppData/Roaming/Binary Ninja/plugins"
 )
