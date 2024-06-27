@@ -3,7 +3,6 @@
 
 #include <fstream>
 #include <sstream>
-#
 
 using namespace BinaryNinja;
 
@@ -80,7 +79,7 @@ BN_DECLARE_CORE_ABI_VERSION
 
 BINARYNINJAPLUGIN bool CorePluginInit()
 {
-	PluginCommand::Register("Cheese", "Cheese",
+	PluginCommand::Register("PatchReader", "Reads a 1337 file & highlights modified contents, (must be rebased to 0x0)",
 		[](BinaryView* View) { Execution(View); });
 
 

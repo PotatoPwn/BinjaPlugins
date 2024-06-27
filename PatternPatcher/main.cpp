@@ -205,7 +205,7 @@ BN_DECLARE_CORE_ABI_VERSION
 
 BINARYNINJAPLUGIN bool CorePluginInit()
 {
-	PluginCommand::Register("Hunt Junk", "Hunt & NOPS Patterns in the Pattern Header",
+	PluginCommand::Register("Patternpatcher", "Finds & Highlight/NOPS a pattern",
 		[](BinaryView* View) { ExecutionList(View); });
 
 
