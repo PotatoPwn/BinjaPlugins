@@ -1,18 +1,14 @@
-#include <algorithm>
+#include <vector>
+#include <sstream>
+#include <fstream>
 
-#include "binaryninjacore.h"
+
 #include "binaryninjaapi.h"
-
-#include "PatternList.h"
+#include "binaryninjacore.h"
 
 using namespace BinaryNinja;
 
-// Forward Declaration
-
-
-// Global Declaration
-
-std::vector<int> ConvertToByte(std::string& Input)
+std::vector<int> ConvertToBytes(std::string& Input)
 {
 	std::vector<int> Output;
 
@@ -21,9 +17,6 @@ std::vector<int> ConvertToByte(std::string& Input)
 		std::string ByteString = Input.substr(i, 2);
 		if (ByteString.find("??") != std::string::npos)
 		{
-			// Convert ?? strings to the hex value of FF
-			// Not Converting Correctly :/ // Too Big?
-			//std::replace(ByteString.begin(), ByteString.end(), '?', 'F');
 			Output.push_back(-1);
 			continue;
 		}
@@ -39,69 +32,67 @@ std::vector<int> ConvertToByte(std::string& Input)
 			Log(ErrorLog, "Error Occured Converting to Hex > %s", ByteString.c_str());
 			Value = -1;
 		}
-
 		Output.push_back(Value);
 	}
-
 	return Output;
 }
 
-void FindSig(BinaryView* View)
+
+void Execution(BinaryView* View)
 {
-	// Essential for Threading (Thanks for Emesare & GalenBwill on Binja slack for this)
-#ifdef _DEBUG
-	BinaryView* ViewRef = View;
-#else
-	Ref<BinaryView> ViewRef = View;
-#endif
+	std::string Result;
 
-	for (unsigned int i = 0; i < DeadCode.size(); i++)
+	// Read PatternList File
+	GetOpenFileNameInput(Result, "PatternList File");
+
+	if (Result.empty())
 	{
-		std::string InputData = DeadCode[i];
+		Log(WarningLog, "No File Provided");
+		return;
+	}
 
-		if (InputData.empty())
+	Log(InfoLog, "File Selected at %s", Result.c_str());
+
+	std::ifstream File(Result);
+
+	if (!File.is_open())
+	{
+		Log(WarningLog, "Failed to open File, Doesn't Exist?");
+		return;
+	}
+
+	// Get Binary Process Information
+	uint64_t BinStart = View->GetStart();
+	uint64_t BinEnd = View->GetEnd();
+	uint64_t BinSize = BinEnd - BinStart;
+
+	// Start Main Function Loop
+	std::string PatternLine;
+	while (std::getline(File, PatternLine))
+	{
+		// Convert the Pattern Strings into Hex Values
+		std::vector<int> HexValue = ConvertToBytes(PatternLine);
+		if (HexValue.empty())
 		{
-			Log(ErrorLog, "Input Data Empty");
-			return;
+			Log(WarningLog, "Error Converting Pattern to Hex > %s", PatternLine.c_str());
+			continue;
 		}
 
-		std::vector<int> HexArray = ConvertToByte(InputData);
-		if (HexArray.empty())
+		// Find the patterns & store the results into a vector array for later processing
+		auto HuntSig = [&]() -> std::vector<uint64_t>
 		{
-			Log(ErrorLog, "Unable to Convert to Hex Value");
-			return;
-		}
-
-
-		uint64_t BinStart = ViewRef->GetStart();
-		uint64_t BinEnd = ViewRef->GetEnd();
-		uint64_t BinSize = BinEnd - BinStart;
-
-		//Log(InfoLog, "bin_start = 0x%llx", BinStart);
-		//Log(InfoLog, "bin_end = 0x%llx", BinEnd);
-		//Log(InfoLog, "bin_size = 0x%llx", BinSize);
-		//Log(InfoLog, "%llu", HexArray.size());
-		// Begin Searching Process
-		// https://github.com/rikodot/binja_native_sigscan/blob/main/sigscan.cpp#L375
-
-		auto HuntSig = [&](uint64_t StartAddress) -> std::vector<uint64_t>
-		{
-			bool FoundFirstMatch = false;
+			bool FoundFirstMatch = FALSE;
 			uint64_t FoundStartAddress = 0;
 			uint64_t Index = 0;
 			unsigned char ReadBytes = 0;
 
-			// Neat little thing, dont preset up an { 0 } as the first result will be a 0, neat...
-			std::vector<uint64_t> ResultA;
+			std::vector<uint64_t> Result;
 
-			for (uint64_t i = StartAddress; i < BinEnd && Index < HexArray.size(); i++)
+			for (uint64_t i = BinStart; i < BinEnd && Index < HexValue.size(); i++)
 			{
-				// Read Value
-				ViewRef->Read(&ReadBytes, i, 2);
-				//Log(InfoLog, "%d", HexArray[Index]);
+				View->Read(&ReadBytes, i, 2);
 
-				// if Match
-				if (HexArray[Index] == ReadBytes || HexArray[Index] == -1)
+				if (HexValue[Index] == ReadBytes || HexValue[Index] == -1)
 				{
 					// Found First Byte to Match
 					if (!FoundFirstMatch)
@@ -113,10 +104,10 @@ void FindSig(BinaryView* View)
 					Index++;
 
 					// Check if the Index is the same size as the Size (Meaning its completed)
-					if (Index == HexArray.size())
+					if (Index == HexValue.size())
 					{
 						// Store in Vector
-						ResultA.push_back(FoundStartAddress);
+						Result.push_back(FoundStartAddress);
 						FoundFirstMatch = false;
 						Index = 0;
 					}
@@ -129,74 +120,42 @@ void FindSig(BinaryView* View)
 					i = FoundStartAddress;
 				}
 			}
-			return ResultA;
-			//return FoundStartAddress;
+			return Result;
 		};
 
-		// Configure Archtecture for NOP Function
+		// Process Results :)
+		std::vector<uint64_t> SigHuntResults = HuntSig();
+		if (SigHuntResults.empty())
+			continue;
 
-		Ref<Architecture> Archtype = Architecture::GetByName("x86_64");
-
-
-		std::vector<uint64_t> Result = HuntSig(BinStart);
-
-		if (Result.empty())
+		// Begin Nopping / Highlighting
+		for (unsigned int i = 0; i < SigHuntResults.size(); i++)
 		{
-			Log(InfoLog, "No Results found for > %s", InputData.c_str());
-		}
-		else
-		{
-			for (unsigned int i = 0; i < Result.size(); i++)
+			uint64_t j = SigHuntResults[i];
+			for (j; j < SigHuntResults[i] + HexValue.size(); j++)
 			{
-				size_t Size = ViewRef->GetInstructionLength(Archtype, Result[i]);
-				if (Size <= HexArray.size())
-				{
-					// Will need a size check as will break functions by nopping functions which arent the intended ones :/
-					// Get Base Address increment, increment by 1 based on size of hexarray & nop
-					// ie base address = 512221 size equals 5, 512221 += 1 -> nop etc etc 512222 += 1 -> nop
-					uint64_t j = Result[i];
-					for (j; j < Result[i] + HexArray.size(); j++)
-					{
-						//ViewRef->ConvertToNop(Archtype, j);
-						Ref<Architecture> Archtype = Architecture::GetByName("x86_64");
-						std::vector<Ref<Function>> function = ViewRef->GetAnalysisFunctionsContainingAddress(j);
+				// Ensure Opcode sits within a function, not in data function
+				std::vector<Ref<Function>> function = View->GetAnalysisFunctionsContainingAddress(j);
+				if (function.empty())
+					continue;
 
-						if (function.size() != 0)
-						{
-							for (unsigned int g = 0; g < function.size(); g++)
-							{
-								function[g]->SetUserInstructionHighlight(Archtype, j, RedHighlightColor);
-								Log(InfoLog, "Function at 0x%llx has been highlighted", j);
-							}
-						}
-						else
-							Log(WarningLog, "Function at 0x%llx doesnt have a function, unable to highlight", j);
+				Ref<Architecture> Archtype = Architecture::GetByName("x86_64");
+				size_t Size = View->GetInstructionLength(Archtype, j);
 
-					}
-					//Log(InfoLog, "Nopped 0x%llx", Result[i]);
-				}
+				// Size of Opcode Must equal opcode size, ie no funny business :)
+				if (Size != HexValue.size())
+					continue;
+
+				// todo Highlight for now, eventually make it so i can either Highlight or NOP
+				function[0]->SetUserInstructionHighlight(View->GetDefaultArchitecture(), j, RedHighlightColor);
+				Log(InfoLog, "Size > %d, Address >  %x, Pattern > %s", Size, j, PatternLine.c_str());
 			}
-			Log(InfoLog, "Finished Clearing %s", InputData.c_str());
 		}
 	}
-	Log(InfoLog, "Finished Hunting!");
-}
+	// Cleanup
+	File.close();
 
-
-void ExecutionList(BinaryView* View)
-{
-	auto HuntWrap = [&]() -> void
-	{
-		FindSig(View);
-	};
-
-#ifdef _DEBUG
-	HuntWrap();
-#else
-	// WorkerEnqueue(HuntWrap, "Bruh");
-#endif
-
-	Log(InfoLog, "Hunt has Started!");
+	return;
 }
 
 extern "C"
@@ -205,8 +164,8 @@ BN_DECLARE_CORE_ABI_VERSION
 
 BINARYNINJAPLUGIN bool CorePluginInit()
 {
-	PluginCommand::Register("Patternpatcher", "Finds & Highlight/NOPS a pattern",
-		[](BinaryView* View) { ExecutionList(View); });
+	PluginCommand::Register("PatternPatcher", "Reads a File with patterns and NOPS Accordingly",
+		[](BinaryView* View) { Execution(View); });
 
 
 	LogInfo("Setup for Test Sig Scanner has been Created");
